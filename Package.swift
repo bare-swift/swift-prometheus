@@ -6,7 +6,7 @@ import PackageDescription
 
 let package = Package(
     name: "swift-prometheus",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v15)],
     products: [
         .library(name: "Prometheus", targets: ["Prometheus"])
     ],
