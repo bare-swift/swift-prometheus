@@ -1,13 +1,46 @@
 # ``Prometheus``
 
-One-line summary of what Prometheus provides.
+Sendable, Foundation-free Prometheus metrics for Swift 6.
 
 ## Overview
 
-A short paragraph describing what this module does, who would use it, and what it explicitly does not do.
+Standalone metric types — Counter, Gauge, Histogram — plus the text-format
+exposition encoder for the `/metrics` endpoint. No `swift-metrics`
+dependency, no HTTP server.
+
+```swift
+import Prometheus
+
+let registry = MetricsRegistry()
+let requests = try registry.counter(
+    name: "http_requests_total",
+    help: "Total HTTP requests."
+)
+try requests.withoutLabels.inc()
+
+let body = registry.exposition()
+```
 
 ## Topics
 
-### Essentials
+### Registry
 
-- _(Add public types / functions here as the API grows.)_
+- ``MetricsRegistry``
+- ``MetricsRegistry/counter(name:help:labels:)``
+- ``MetricsRegistry/gauge(name:help:labels:)``
+- ``MetricsRegistry/histogram(name:help:labels:buckets:)``
+- ``MetricsRegistry/exposition()``
+- ``MetricsRegistry/defaultBuckets``
+
+### Metric types
+
+- ``Counter``
+- ``Gauge``
+- ``Histogram``
+- ``LabeledMetric``
+- ``Labels``
+- ``AnyMetric``
+
+### Errors
+
+- ``MetricsError``
