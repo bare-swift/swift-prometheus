@@ -50,7 +50,8 @@ public final class Histogram: AnyMetric, @unchecked Sendable {
         var out: [(upperBound: Double, count: UInt64)] = []
         out.reserveCapacity(upperBounds.count)
         for i in 0..<upperBounds.count {
-            cumulative &+= perBucket[i].load(ordering: .relaxed)
+            let bucketCount: UInt64 = perBucket[i].load(ordering: .relaxed)
+            cumulative &+= bucketCount
             out.append((upperBounds[i], cumulative))
         }
         return out
