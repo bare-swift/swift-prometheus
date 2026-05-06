@@ -5,22 +5,28 @@ import Synchronization
 
 /// Bucketed Double observations + cumulative sum + count.
 public final class Histogram: AnyMetric, @unchecked Sendable {
+    /// Internal holder so we can store ~Copyable `Atomic` values in an array.
+    final class AtomicCounter: @unchecked Sendable {
+        let atomic: Atomic<UInt64> = Atomic(0)
+        init() {}
+    }
+
     /// Validated, canonicalized upper bounds (always ends with `+Inf`).
     public let upperBounds: [Double]
-    private let perBucket: [Atomic<UInt64>]
+    private let perBucket: [AtomicCounter]
     private let _count: Atomic<UInt64> = Atomic(0)
     private let _sumBits: Atomic<UInt64> = Atomic(0)
 
     public init(buckets: [Double]) throws(MetricsError) {
         let canonical = try Validation.validateAndCanonicalizeBuckets(buckets)
         self.upperBounds = canonical
-        self.perBucket = canonical.map { _ in Atomic<UInt64>(0) }
+        self.perBucket = canonical.map { _ in AtomicCounter() }
     }
 
     public func observe(_ value: Double) {
         for i in 0..<upperBounds.count {
             if value <= upperBounds[i] {
-                perBucket[i].add(1, ordering: .relaxed)
+                perBucket[i].atomic.add(1, ordering: .relaxed)
                 break
             }
         }
@@ -50,7 +56,7 @@ public final class Histogram: AnyMetric, @unchecked Sendable {
         var out: [(upperBound: Double, count: UInt64)] = []
         out.reserveCapacity(upperBounds.count)
         for i in 0..<upperBounds.count {
-            let bucketCount: UInt64 = perBucket[i].load(ordering: .relaxed)
+            let bucketCount: UInt64 = perBucket[i].atomic.load(ordering: .relaxed)
             cumulative &+= bucketCount
             out.append((upperBounds[i], cumulative))
         }
