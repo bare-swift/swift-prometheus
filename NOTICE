@@ -13,3 +13,7 @@ The Prometheus text-based exposition format is documented at:
   https://prometheus.io/docs/instrumenting/exposition_formats/
 
 The Swift translation is independent; no Rust source is included.
+
+This product depends on swift-bytes
+(https://github.com/bare-swift/swift-bytes, Apache-2.0 with LLVM exception)
+for its Bytes output type.

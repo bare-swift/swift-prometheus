@@ -11,7 +11,7 @@ Part of the [bare-swift](https://github.com/bare-swift) ecosystem.
 ## Install
 
 ```swift
-.package(url: "https://github.com/bare-swift/swift-prometheus.git", from: "0.1.0")
+.package(url: "https://github.com/bare-swift/swift-prometheus.git", from: "0.2.0")
 ```
 
 ```swift
@@ -22,6 +22,7 @@ Part of the [bare-swift](https://github.com/bare-swift) ecosystem.
 
 ```swift
 import Prometheus
+import Bytes
 
 let registry = MetricsRegistry()
 
@@ -48,8 +49,28 @@ let latency = try registry.histogram(
 )
 try latency.withoutLabels.observe(0.123)
 
-// Render for /metrics
-let body = registry.exposition()
+// Render the canonical Prometheus text exposition.
+let payload: Bytes = registry.exposition()
+// Hand `payload.storage` to your HTTP response body with
+// Content-Type: text/plain; version=0.0.4
+// To recover a String: String(decoding: payload.storage, as: UTF8.self)
+```
+
+## Migration from 0.1
+
+`MetricsRegistry.exposition()` now returns `Bytes` (from
+[swift-bytes](https://github.com/bare-swift/swift-bytes)) instead of `String`.
+The wire format is unchanged byte-for-byte; only the return type differs.
+
+```swift
+// 0.1
+let body: String = registry.exposition()
+let utf8: [UInt8] = Array(body.utf8)
+
+// 0.2
+let bytes: Bytes = registry.exposition()
+let utf8: ContiguousArray<UInt8> = bytes.storage  // already UTF-8
+// Or: String(decoding: bytes.storage, as: UTF8.self) if you still want a String.
 ```
 
 ## Documentation
