@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 import Testing
+import Bytes
 @testable import Prometheus
 
 @Suite("Exposition (text-format)")
@@ -12,7 +13,7 @@ struct ExpositionTests {
         let inst = try c.withoutLabels
         inst.inc()
         inst.inc()
-        let body = r.exposition()
+        let body = String(decoding: r.exposition().storage, as: UTF8.self)
         #expect(body.contains("# HELP http_requests_total Total HTTP requests."))
         #expect(body.contains("# TYPE http_requests_total counter"))
         #expect(body.contains("http_requests_total 2.0"))
@@ -29,10 +30,9 @@ struct ExpositionTests {
         try c.with(["method": "POST", "status": "500"]).inc()
         try c.with(["method": "GET", "status": "200"]).inc()
         try c.with(["method": "GET", "status": "200"]).inc()
-        let body = r.exposition()
+        let body = String(decoding: r.exposition().storage, as: UTF8.self)
         #expect(body.contains(#"errors_total{method="GET",status="200"} 2.0"#))
         #expect(body.contains(#"errors_total{method="POST",status="500"} 1.0"#))
-        // Ordering: GET row should appear before POST row.
         if let getIdx = body.range(of: #"method="GET""#)?.lowerBound,
            let postIdx = body.range(of: #"method="POST""#)?.lowerBound {
             #expect(getIdx < postIdx)
@@ -45,7 +45,7 @@ struct ExpositionTests {
         let g = try r.gauge(name: "in_flight_requests", help: "Currently-handled requests.")
         let inst = try g.withoutLabels
         inst.set(3.0)
-        let body = r.exposition()
+        let body = String(decoding: r.exposition().storage, as: UTF8.self)
         #expect(body.contains("# TYPE in_flight_requests gauge"))
         #expect(body.contains("in_flight_requests 3.0"))
     }
@@ -62,14 +62,13 @@ struct ExpositionTests {
         inst.observe(0.05)
         inst.observe(0.3)
         inst.observe(2.0)
-        let body = r.exposition()
+        let body = String(decoding: r.exposition().storage, as: UTF8.self)
         #expect(body.contains("# TYPE request_duration_seconds histogram"))
         #expect(body.contains(#"request_duration_seconds_bucket{le="0.1"} 1"#))
         #expect(body.contains(#"request_duration_seconds_bucket{le="0.5"} 2"#))
         #expect(body.contains(#"request_duration_seconds_bucket{le="1.0"} 2"#))
         #expect(body.contains(#"request_duration_seconds_bucket{le="+Inf"} 3"#))
         #expect(body.contains("request_duration_seconds_count 3"))
-        // Sum should be 0.05 + 0.3 + 2.0 = 2.35 (within float precision).
         #expect(body.contains("request_duration_seconds_sum 2.35"))
     }
 
@@ -81,10 +80,8 @@ struct ExpositionTests {
             help: "Edge cases.",
             labels: ["v"]
         )
-        // Real backslash, real double-quote, and real newline in the label value.
         try c.with(["v": "back\\slash and \"quote\" and\nnewline"]).inc()
-        let body = r.exposition()
-        // Backslash → \\, double-quote → \", newline → \n
+        let body = String(decoding: r.exposition().storage, as: UTF8.self)
         #expect(body.contains(#"weird{v="back\\slash and \"quote\" and\nnewline"} 1.0"#))
     }
 
@@ -92,7 +89,16 @@ struct ExpositionTests {
     func helpEscaping() throws {
         let r = MetricsRegistry()
         _ = try r.counter(name: "x", help: "line1\nline2 with \\ backslash")
-        let body = r.exposition()
+        let body = String(decoding: r.exposition().storage, as: UTF8.self)
         #expect(body.contains(#"# HELP x line1\nline2 with \\ backslash"#))
+    }
+
+    @Test("exposition() returns Bytes type (regression check)")
+    func returnTypeIsBytes() throws {
+        let r = MetricsRegistry()
+        _ = try r.counter(name: "x", help: "y")
+        let payload = r.exposition()
+        let _: Bytes = payload
+        #expect(!payload.isEmpty)
     }
 }
