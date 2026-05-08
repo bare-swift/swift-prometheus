@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 // Copyright (c) 2026 The bare-swift Project Authors.
 
+import Bytes
 import Synchronization
 
 /// Top-level metrics collector. Register counter / gauge / histogram families
@@ -85,12 +86,17 @@ public final class MetricsRegistry: @unchecked Sendable {
         }
     }
 
-    /// Render the canonical Prometheus text-format exposition.
-    public func exposition() -> String {
+    /// Render the canonical Prometheus text-format exposition as UTF-8 bytes.
+    ///
+    /// Hand `payload.storage` to your HTTP response body, set
+    /// `Content-Type: text/plain; version=0.0.4` per the Prometheus exposition
+    /// spec, and respond. To recover a `String`,
+    /// `String(decoding: payload.storage, as: UTF8.self)`.
+    public func exposition() -> Bytes {
         let snapshot: [FamilyEntry] = families.withLock { Array($0) }
-        var out: String = ""
+        var out: Bytes = Bytes(reservingCapacity: 256)
         for entry in snapshot {
-            out.append(Exposition.encode(entry))
+            Exposition.encode(entry, into: &out)
         }
         return out
     }

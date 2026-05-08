@@ -1,64 +1,59 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 // Copyright (c) 2026 The bare-swift Project Authors.
 
+import Bytes
+
 /// Internal pure-function namespace for Prometheus text-format exposition.
+/// In 0.2 this writes UTF-8 bytes directly into a `Bytes` buffer; the public
+/// exposition entry point returns `Bytes` for callers to hand to HTTP transport.
 enum Exposition {
-    static func encode(_ entry: MetricsRegistry.FamilyEntry) -> String {
+    static func encode(_ entry: MetricsRegistry.FamilyEntry, into out: inout Bytes) {
         switch entry {
-        case .counter(let family):
-            return encodeCounter(family)
-        case .gauge(let family):
-            return encodeGauge(family)
-        case .histogram(let family):
-            return encodeHistogram(family)
+        case .counter(let family):   encodeCounter(family, into: &out)
+        case .gauge(let family):     encodeGauge(family, into: &out)
+        case .histogram(let family): encodeHistogram(family, into: &out)
         }
     }
 
-    static func encodeCounter(_ family: LabeledMetric<Counter>) -> String {
-        var out: String = ""
-        out.append("# HELP \(family.name) \(escapeHelp(family.help))\n")
-        out.append("# TYPE \(family.name) counter\n")
+    static func encodeCounter(_ family: LabeledMetric<Counter>, into out: inout Bytes) {
+        appendLine(into: &out, "# HELP \(family.name) \(escapeHelp(family.help))")
+        appendLine(into: &out, "# TYPE \(family.name) counter")
         let snap = family.snapshot()
         for (labels, instance) in snap {
-            out.append("\(family.name)\(formatLabels(labels)) \(formatDouble(instance.value))\n")
+            appendLine(into: &out, "\(family.name)\(formatLabels(labels)) \(formatDouble(instance.value))")
         }
         if snap.isEmpty && family.labelNames.isEmpty {
-            out.append("\(family.name) 0\n")
+            appendLine(into: &out, "\(family.name) 0")
         }
-        out.append("\n")
-        return out
+        out.append(0x0A)  // trailing blank-line separator
     }
 
-    static func encodeGauge(_ family: LabeledMetric<Gauge>) -> String {
-        var out: String = ""
-        out.append("# HELP \(family.name) \(escapeHelp(family.help))\n")
-        out.append("# TYPE \(family.name) gauge\n")
+    static func encodeGauge(_ family: LabeledMetric<Gauge>, into out: inout Bytes) {
+        appendLine(into: &out, "# HELP \(family.name) \(escapeHelp(family.help))")
+        appendLine(into: &out, "# TYPE \(family.name) gauge")
         let snap = family.snapshot()
         for (labels, instance) in snap {
-            out.append("\(family.name)\(formatLabels(labels)) \(formatDouble(instance.value))\n")
+            appendLine(into: &out, "\(family.name)\(formatLabels(labels)) \(formatDouble(instance.value))")
         }
         if snap.isEmpty && family.labelNames.isEmpty {
-            out.append("\(family.name) 0\n")
+            appendLine(into: &out, "\(family.name) 0")
         }
-        out.append("\n")
-        return out
+        out.append(0x0A)
     }
 
-    static func encodeHistogram(_ family: LabeledMetric<Histogram>) -> String {
-        var out: String = ""
-        out.append("# HELP \(family.name) \(escapeHelp(family.help))\n")
-        out.append("# TYPE \(family.name) histogram\n")
+    static func encodeHistogram(_ family: LabeledMetric<Histogram>, into out: inout Bytes) {
+        appendLine(into: &out, "# HELP \(family.name) \(escapeHelp(family.help))")
+        appendLine(into: &out, "# TYPE \(family.name) histogram")
         let snap = family.snapshot()
         for (labels, instance) in snap {
             for (upperBound, count) in instance.bucketCounts {
                 let leLabel: Labels = mergeLeLabel(into: labels, le: formatLeBound(upperBound))
-                out.append("\(family.name)_bucket\(formatLabels(leLabel)) \(count)\n")
+                appendLine(into: &out, "\(family.name)_bucket\(formatLabels(leLabel)) \(count)")
             }
-            out.append("\(family.name)_sum\(formatLabels(labels)) \(formatDouble(instance.sum))\n")
-            out.append("\(family.name)_count\(formatLabels(labels)) \(instance.count)\n")
+            appendLine(into: &out, "\(family.name)_sum\(formatLabels(labels)) \(formatDouble(instance.sum))")
+            appendLine(into: &out, "\(family.name)_count\(formatLabels(labels)) \(instance.count)")
         }
-        out.append("\n")
-        return out
+        out.append(0x0A)
     }
 
     static func formatLabels(_ labels: Labels) -> String {
@@ -119,5 +114,11 @@ enum Exposition {
             }
         }
         return out
+    }
+
+    /// Append a UTF-8 line plus a trailing `\n`. Used by all three encoders.
+    private static func appendLine(into out: inout Bytes, _ line: String) {
+        out.append(contentsOf: line.utf8)
+        out.append(0x0A)  // '\n'
     }
 }
